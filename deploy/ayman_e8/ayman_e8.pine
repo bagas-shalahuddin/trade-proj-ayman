@@ -1,0 +1,529 @@
+//@version=6
+indicator("Ayman Entry Signal – Ultimate PRO (Scalping Gold Settings)", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// === 🧮 Account Settings ===
+groupAccount = "🧮 Account Settings"
+capital         = input.float(2000, title="Capital ($)", group=groupAccount)
+riskPercent     = input.float(1.5,  title="Risk Percentage %", group=groupAccount)
+rewardRiskRatio = input.float(1.2,  title="TP to SL Ratio (Reward:Risk)", minval=0.0, step=0.1, group=groupAccount)
+valuePerLot     = input.float(10.0, title="Value Per Point ($)", group=groupAccount)
+slBufferPoints  = input.float(4,     title="SL Buffer (points)", group=groupAccount)
+
+// === 🎯 Take Profit Settings ===
+groupTP = "🎯 Take Profit Settings"
+tp1Ratio        = input.float(0.7, title="TP1 % of Full Target", minval=0.1, maxval=1, group=groupTP)
+useBreakEven    = input.bool(true, title="Move SL to Entry after TP1?", group=groupTP)
+breakEvenBuffer = input.float(0.5, title="Break Even Buffer (points)", group=groupTP)
+partialClose    = input.bool(true, title="Take Partial Close at TP1 (50%)?", group=groupTP)
+
+// === 📊 Signal Filters ===
+groupFilters = "📊 Signal Filters"
+atrPeriod         = input.int(10, title="ATR Period", group=groupFilters)
+useEMA            = input.bool(true, title="Use EMA Trend", group=groupFilters)
+useBoS            = input.bool(true, title="Use Break of Structure", group=groupFilters)
+useOB             = input.bool(false, title="Use Order Block", group=groupFilters)
+useFVG            = input.bool(false, title="Use Fair Value Gap (PRO)", group=groupFilters)
+useLiquidity      = input.bool(true, title="Use Liquidity Sweep", group=groupFilters)
+liquidityLookback = input.int(5, title="Liquidity Lookback Bars", group=groupFilters)
+usePinBar         = input.bool(true, title="Use Pin Bar Confirmation", group=groupFilters)
+pinBarBodyRatio   = input.float(0.25, title="Max Body-to-Wick Ratio (Pin Bar)", step=0.05, group=groupFilters)
+showPinBarShape   = input.bool(false, title="Show Pin Bar Shape on Chart?", group=groupFilters)
+
+// === ⏫ Higher Timeframe Filters ===
+groupHTF = "⏫ Higher Timeframe Filters"
+groupVol   = "Volume Filter (measured 2026-09-20)"
+useRelVol  = input.bool(true,  title="Skip thin bars (relvol filter)", group=groupVol)
+relVolMin  = input.float(0.99, title="Min volume / 20-day median at this time of day", step=0.01, group=groupVol)
+relVolDays = input.int(20,     title="Median window (days)", minval=5, group=groupVol)
+alertKey   = input.string("",  title="Webhook secret (must match .env)", group=groupVol)
+
+useHTF_EMA = input.bool(false, title="Use HTF EMA Confirmation", group=groupHTF)
+useHTF_BoS = input.bool(false, title="Use HTF BoS Confirmation", group=groupHTF)
+htf        = input.timeframe("15", title="HTF Timeframe", group=groupHTF)
+
+// === 🧠 Advanced Filters ===
+groupAdvanced = "🧠 Advanced Filters"
+useSuperTrend     = input.bool(true, "Use SuperTrend Filter", group=groupAdvanced)
+superTrendFactor  = input.float(3, "SuperTrend Factor", minval=1, group=groupAdvanced)
+superTrendATRLen  = input.int(10, "SuperTrend ATR Length", minval=2, group=groupAdvanced)
+useADXFilter      = input.bool(true, "Use ADX Filter", group=groupAdvanced)
+adxLength         = input.int(14, "ADX Length", minval=3, group=groupAdvanced)
+adxThreshold      = input.int(18, "ADX Threshold", minval=5, maxval=50, group=groupAdvanced)
+useSMACross       = input.bool(false, "Use SMA(8/9) Cross Filter", group=groupAdvanced)
+useTrendCloud     = input.bool(true, "Use Trend Cloud Filter", group=groupAdvanced)
+
+// === 🎨 Style & Display Settings ===
+groupStyle = "🎨 Style Settings"
+colorTPFull     = input.color(color.green, title="TP2 Line/Label Color", group=groupStyle)
+colorTP1        = input.color(color.lime,  title="TP1 Line/Label Color", group=groupStyle)
+colorSL         = input.color(color.red,   title="SL Line/Label Color", group=groupStyle)
+colorEntry      = input.color(color.gray,  title="Entry Line/Label Color", group=groupStyle)
+colorBoxBuy     = input.color(color.new(color.green, 85), title="Buy Box Fill", group=groupStyle)
+colorBoxSell    = input.color(color.new(color.red,   85), title="Sell Box Fill", group=groupStyle)
+colorBoxBorder  = input.color(color.new(color.gray, 100), title="Box Border Color", group=groupStyle)
+pnlProfitColor  = input.color(color.orange, title="PnL Color (Profit)", group=groupStyle)
+pnlLossColor    = input.color(color.orange, title="PnL Color (Loss)", group=groupStyle)
+pnlTextColor    = input.color(color.black,  title="PnL Text Color", group=groupStyle)
+
+// === 📋 Trade & Stats Display ===
+groupDisplay = "📋 Trade Display Options"
+showPreviousTrades = input.bool(true, title="Show Previous Trades", group=groupDisplay)
+showTradeBox       = input.bool(true, title="Show Trade Box", group=groupDisplay)
+showDynamicPnL     = input.bool(true, title="Show Dynamic PnL Label", group=groupDisplay)
+pnlLabelPosition   = input.string("center", title="Dynamic PnL Label Position", options=["top", "center", "bottom"], group=groupDisplay)
+
+// === 📈 Stats Panel Settings ===
+groupStats = "📈 Stats Panel Settings"
+showStatsPanel    = input.bool(true, title="Show Stats Panel?", group=groupStats)
+resetStats        = input.bool(true, title="Reset Stats Panel?", group=groupStats)
+statsHeaderColor  = input.color(color.new(color.blue, 80), title="Stats Header BG", group=groupStats)
+statsBgColor      = input.color(color.new(color.black, 90), title="Stats Panel BG", group=groupStats)
+statsFrameColor   = input.color(color.gray, title="Stats Frame Color", group=groupStats)
+statsTextColor    = input.color(color.black, title="Stats Text Color", group=groupStats)
+useCurrentDate    = input.bool(false, title="Use Today's Date for Stats?", group=groupStats)
+startDate         = input.time(timestamp("2025-07-01T00:00:00"), title="Start Date", group=groupStats)
+endDate           = input.time(timestamp("2025-07-01T00:00:00"), title="End Date", group=groupStats)
+
+// === Variables & Arrays ===
+var int   totalTrades     = 0
+var int   winTrades       = 0
+var int   lossTrades      = 0
+var int   breakevenTrades = 0
+var float cumulativePnL   = 0.0
+var table statsTable      = na
+
+var float[] tradePnLs = array.new_float()
+var int[]   tradeTimes = array.new_int()
+var float tradePnL        = na
+
+// === Reset Stats if requested ===
+if resetStats and not resetStats[1]
+    totalTrades     := 0
+    winTrades       := 0
+    lossTrades      := 0
+    breakevenTrades := 0
+    cumulativePnL   := 0.0
+    array.clear(tradePnLs)
+    array.clear(tradeTimes)
+
+// === EMA Trend Calculation ===
+emaFast = ta.ema(close, 9)
+emaSlow = ta.ema(close, 21)
+bullishTrend = emaFast > emaSlow
+bearishTrend = emaFast < emaSlow
+
+// === HTF EMA ===
+htfEmaFast = request.security(syminfo.tickerid, htf, ta.ema(close, 9))
+htfEmaSlow = request.security(syminfo.tickerid, htf, ta.ema(close, 21))
+htfBullish = htfEmaFast > htfEmaSlow
+htfBearish = htfEmaFast < htfEmaSlow
+
+// === Break of Structure ===
+var float lastHigh = na
+var float lastLow  = na
+if high > high[1] and high[1] > high[2]
+    lastHigh := high[1]
+if low < low[1] and low[1] < low[2]
+    lastLow := low[1]
+bosBullish = not na(lastHigh) and close > lastHigh * 0.995
+bosBearish = not na(lastLow)  and close < lastLow  * 1.005
+
+// === HTF BoS ===
+htfHigh   = request.security(syminfo.tickerid, htf, high)
+htfLow    = request.security(syminfo.tickerid, htf, low)
+htfHigh_1 = request.security(syminfo.tickerid, htf, high[1])
+htfHigh_2 = request.security(syminfo.tickerid, htf, high[2])
+htfLow_1  = request.security(syminfo.tickerid, htf, low[1])
+htfLow_2  = request.security(syminfo.tickerid, htf, low[2])
+var float lastHTFHigh = na
+var float lastHTFLow  = na
+if htfHigh > htfHigh_1 and htfHigh_1 > htfHigh_2
+    lastHTFHigh := htfHigh_1
+if htfLow  < htfLow_1  and htfLow_1  < htfLow_2
+    lastHTFLow  := htfLow_1
+htfBoSBull = not na(lastHTFHigh) and close > lastHTFHigh * 0.995
+htfBoSBear = not na(lastHTFLow)  and close < lastHTFLow  * 1.005
+
+// === Order Blocks ===
+obBullish = ta.valuewhen(bosBearish, low, 1)
+obBearish = ta.valuewhen(bosBullish, high, 1)
+inOBZone  = (bullishTrend and close >= obBullish * 0.98) or (bearishTrend and close <= obBearish * 1.02)
+
+// === Fair Value Gaps (FVG) ===
+var float[] fvg_tops = array.new_float()
+var float[] fvg_bottoms = array.new_float()
+var int[]   fvg_dirs = array.new_int()   // 1=up, -1=down
+var int[]   fvg_bars = array.new_int()
+newFVGup   = low[2] > high[1]
+newFVGdown = high[2] < low[1]
+if newFVGup
+    array.push(fvg_tops, low[2])
+    array.push(fvg_bottoms, high[1])
+    array.push(fvg_dirs, 1)
+    array.push(fvg_bars, bar_index-2)
+if newFVGdown
+    array.push(fvg_tops, high[1])
+    array.push(fvg_bottoms, low[2])
+    array.push(fvg_dirs, -1)
+    array.push(fvg_bars, bar_index-2)
+// Remove filled FVGs on current bar
+sz = array.size(fvg_tops)
+if sz > 0
+    for i = sz - 1 to 0
+        dir = array.get(fvg_dirs, i)
+        top = array.get(fvg_tops, i)
+        bot = array.get(fvg_bottoms, i)
+        filled = false
+        if dir == 1
+            filled := low <= bot
+        else
+            filled := high >= top
+        if filled
+            array.remove(fvg_tops, i)
+            array.remove(fvg_bottoms, i)
+            array.remove(fvg_dirs, i)
+            array.remove(fvg_bars, i)
+// Status vars for FVG
+var bool isFVGup   = false
+var bool isFVGdown = false
+isFVGup   := false
+isFVGdown := false
+sz_fvg = array.size(fvg_tops)
+if sz_fvg > 0
+    for i = 0 to sz_fvg - 1
+        dir = array.get(fvg_dirs, i)
+        if dir == 1
+            isFVGup := true
+        if dir == -1
+            isFVGdown := true
+isFVG = isFVGup or isFVGdown
+
+// === Liquidity Sweep ===
+liquidityBuyTriggered  = low  <= ta.lowest(low[1], liquidityLookback)  * 1.01
+liquiditySellTriggered = high >= ta.highest(high[1], liquidityLookback) * 0.99
+
+// === Pin Bar Candles ===
+bodySize    = math.abs(close - open)
+candleRange = high - low
+upperWick   = high - math.max(close, open)
+lowerWick   = math.min(close, open) - low
+isBullPinBar= (lowerWick > upperWick * 2) and (bodySize / candleRange < pinBarBodyRatio)
+isBearPinBar= (upperWick > lowerWick * 2) and (bodySize / candleRange < pinBarBodyRatio)
+
+// === 📊 Actual ADX Filter Logic ===
+
+// === ☁️ Trend Cloud Logic ===
+ema50 = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+cloudBull = ema50 > ema200
+cloudBear = ema50 < ema200
+
+// === 🔄 SMA Cross Logic ===
+smaShort = ta.sma(close, 8)
+smaLong = ta.sma(close, 9)
+smaCrossUp = ta.crossover(smaShort, smaLong)
+smaCrossDown = ta.crossunder(smaShort, smaLong)
+
+// === ✅ Manual ADX Calculation ===
+plusDM  = ta.change(high) > ta.change(low) and ta.change(high) > 0 ? ta.change(high) : 0
+minusDM = ta.change(low) > ta.change(high) and ta.change(low) > 0 ? ta.change(low) : 0
+tr      = ta.tr(true)
+
+plusDI  = 100 * ta.rma(plusDM, adxLength) / ta.rma(tr, adxLength)
+minusDI = 100 * ta.rma(minusDM, adxLength) / ta.rma(tr, adxLength)
+dx      = 100 * math.abs(plusDI - minusDI) / (plusDI + minusDI)
+adxValue = ta.rma(dx, adxLength)
+adxCond = adxValue > adxThreshold
+
+// === Entry Conditions ===
+condBuy  = useEMA ? bullishTrend : true
+condSell = useEMA ? bearishTrend : true
+
+condBuy  := useBoS ? (condBuy  and bosBullish) : condBuy
+condSell := useBoS ? (condSell and bosBearish) : condSell
+
+condBuy  := useOB  ? (condBuy  and inOBZone)  : condBuy
+condSell := useOB  ? (condSell and inOBZone)  : condSell
+
+condBuy  := useFVG ? (condBuy and isFVGup) : condBuy
+condSell := useFVG ? (condSell and isFVGdown) : condSell
+
+condBuy  := useLiquidity ? (condBuy  and liquidityBuyTriggered)  : condBuy
+condSell := useLiquidity ? (condSell and liquiditySellTriggered) : condSell
+
+condBuy  := usePinBar ? (condBuy  and isBullPinBar) : condBuy
+condSell := usePinBar ? (condSell and isBearPinBar) : condSell
+
+condBuy  := useHTF_EMA ? (condBuy  and htfBullish) : condBuy
+condSell := useHTF_EMA ? (condSell and htfBearish) : condSell
+
+condBuy  := useHTF_BoS ? (condBuy  and htfBoSBull) : condBuy
+condSell := useHTF_BoS ? (condSell and htfBoSBear) : condSell
+
+condBuy  := useADXFilter ? (condBuy and adxCond) : condBuy
+condSell := useADXFilter ? (condSell and adxCond) : condSell
+
+condBuy  := useSMACross ? (condBuy and smaCrossUp) : condBuy
+condSell := useSMACross ? (condSell and smaCrossDown) : condSell
+
+condBuy  := useTrendCloud ? (condBuy and cloudBull) : condBuy
+condSell := useTrendCloud ? (condSell and cloudBear) : condSell
+
+// === Entry Signals ===
+// === Relative volume: this bar's ticks / median of the last N days at the SAME time of
+// day. Bottom quartile (< 0.99) was -0.087R/trade over 5y, the rest +0.156R.
+var map<int, array<float>> volByTod = map.new<int, array<float>>()
+todKey = hour(time, "UTC") * 2 + math.floor(minute(time, "UTC") / 30)
+volHist = map.get(volByTod, todKey)
+if na(volHist)
+    volHist := array.new<float>()
+    map.put(volByTod, todKey, volHist)
+relVol = array.size(volHist) >= 5 ? volume / array.median(volHist) : na
+if barstate.isconfirmed
+    array.push(volHist, volume)
+    if array.size(volHist) > relVolDays
+        array.shift(volHist)
+relVolOk = not useRelVol or (not na(relVol) and relVol >= relVolMin)
+condBuy  := condBuy  and relVolOk
+condSell := condSell and relVolOk
+
+showBuy  = condBuy  and not condBuy[1]
+showSell = condSell and not condSell[1]
+
+// === Trade Management Variables ===
+var bool  inTrade       = false
+var bool  partialClosed = false
+var float tradeSL       = na
+var float tradeTPFull   = na
+var float tradeTP1      = na
+var float entryFixed    = na
+var float lotSize       = na
+var box   tradeBox      = na
+var bool tradeIsBuy     = false
+var int entryBar        = na
+
+// === Arrays for previous trade drawings ===
+var line[]  tpFullLines  = array.new_line()
+var line[]  tp1Lines     = array.new_line()
+var line[]  slLines      = array.new_line()
+var line[]  entryLines   = array.new_line()
+var label[] tpFullLabels = array.new_label()
+var label[] tp1Labels    = array.new_label()
+var label[] slLabels     = array.new_label()
+var label[] entryLabels  = array.new_label()
+var label[] tradeResultLabels = array.new_label()
+var label currentPnLLabel = na
+
+atrValue = ta.atr(atrPeriod)
+
+// --- PnL Calculation Function ---
+f_calcPnL(_price) =>
+    isBuy     = tradeTPFull > tradeSL
+    priceDiff = isBuy ? (_price - entryFixed) : (entryFixed - _price)
+    pnl       = priceDiff * lotSize * valuePerLot
+    pnl
+
+// === New Trade Entry ===
+if not inTrade
+    if showSell
+        inTrade       := true
+        tradeIsBuy    := false
+        entryBar      := bar_index
+        partialClosed := false
+        entryFixed    := close
+        tradeSL       := high + slBufferPoints + atrValue * 0.8
+        tradeTPFull   := entryFixed - (tradeSL - entryFixed) * rewardRiskRatio
+        tradeTP1      := entryFixed - (tradeSL - entryFixed) * rewardRiskRatio * tp1Ratio
+        lotSize       := (capital * (riskPercent / 100)) / ((tradeSL - entryFixed) * valuePerLot)
+        alert('{"key":"' + alertKey + '","side":"sell","entry":' + str.tostring(entryFixed) + ',"sl":' + str.tostring(tradeSL) + ',"tp":' + str.tostring(tradeTP1) + ',"relvol":' + str.tostring(relVol, "#.##") + ',"bar":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+        if showTradeBox
+            tradeBox := box.new(left=bar_index, right=bar_index, top=tradeSL, bottom=tradeTPFull, border_color=colorBoxBorder, bgcolor=colorBoxSell)
+    else if showBuy
+        inTrade       := true
+        tradeIsBuy    := true
+        entryBar      := bar_index
+        partialClosed := false
+        entryFixed    := close
+        tradeSL       := low - slBufferPoints - atrValue * 0.8
+        tradeTPFull   := entryFixed + (entryFixed - tradeSL) * rewardRiskRatio
+        tradeTP1      := entryFixed + (entryFixed - tradeSL) * rewardRiskRatio * tp1Ratio
+        lotSize       := (capital * (riskPercent / 100)) / ((entryFixed - tradeSL) * valuePerLot)
+        alert('{"key":"' + alertKey + '","side":"buy","entry":' + str.tostring(entryFixed) + ',"sl":' + str.tostring(tradeSL) + ',"tp":' + str.tostring(tradeTP1) + ',"relvol":' + str.tostring(relVol, "#.##") + ',"bar":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+        if showTradeBox
+            tradeBox := box.new(left=bar_index, right=bar_index, top=tradeTPFull, bottom=tradeSL, border_color=colorBoxBorder, bgcolor=colorBoxBuy)
+
+// Extend trade box
+if inTrade and not na(tradeBox) and showTradeBox
+    box.set_right(tradeBox, bar_index)
+
+// === Smart Break Even Logic ===
+if inTrade and useBreakEven
+    if tradeIsBuy and close >= tradeTP1 and tradeSL < entryFixed
+        tradeSL := entryFixed + breakEvenBuffer
+    if not tradeIsBuy and close <= tradeTP1 and tradeSL > entryFixed
+        tradeSL := entryFixed - breakEvenBuffer
+
+// === Partial Close Logic ===
+if inTrade and partialClose and not partialClosed
+    if tradeIsBuy and close >= tradeTP1
+        partialClosed := true
+    else if not tradeIsBuy and close <= tradeTP1
+        partialClosed := true
+
+// === Trade Exit Logic ===
+if inTrade
+    bool isBuyTrade = tradeIsBuy
+    float exitPrice = na
+    if isBuyTrade
+        if close <= tradeSL
+            exitPrice := tradeSL
+        else if close >= tradeTPFull
+            exitPrice := tradeTPFull
+        else if close >= tradeTP1
+            exitPrice := tradeTP1
+    else
+        if close >= tradeSL
+            exitPrice := tradeSL
+        else if close <= tradeTPFull
+            exitPrice := tradeTPFull
+        else if close <= tradeTP1
+            exitPrice := tradeTP1
+
+    if not na(exitPrice)
+        inTrade := false
+        if not na(currentPnLLabel)
+            label.delete(currentPnLLabel)
+        currentPnLLabel := na
+        tradePnL := f_calcPnL(exitPrice)
+        array.push(tradePnLs, tradePnL)
+        array.push(tradeTimes, int(time))
+        totalTrades    += 1
+        cumulativePnL  += tradePnL
+        if tradePnL > 0
+            winTrades  += 1
+        else if tradePnL < 0
+            lossTrades += 1
+        else
+            breakevenTrades += 1
+
+        if showPreviousTrades
+            array.push(tpFullLines, line.new(x1=bar_index, y1=tradeTPFull, x2=bar_index + 10, y2=tradeTPFull, color=colorTPFull, style=line.style_dashed, width=2))
+            array.push(tp1Lines,    line.new(x1=bar_index, y1=tradeTP1,    x2=bar_index + 10, y2=tradeTP1,    color=colorTP1,   style=line.style_dashed, width=2))
+            array.push(slLines,     line.new(x1=bar_index, y1=tradeSL,     x2=bar_index + 10, y2=tradeSL,     color=colorSL,    style=line.style_dashed, width=2))
+            array.push(entryLines,  line.new(x1=bar_index, y1=entryFixed,  x2=bar_index + 10, y2=entryFixed,  color=colorEntry, style=line.style_solid,  width=2))
+            float pnlTP2 = f_calcPnL(tradeTPFull)
+            float pnlTP1 = f_calcPnL(tradeTP1)
+            float pnlSL  = f_calcPnL(tradeSL)
+            array.push(tpFullLabels, label.new(x=bar_index + 11, y=tradeTPFull, text="TP2: " + str.tostring(tradeTPFull, format.mintick) + "\nPnL: $" + str.tostring(pnlTP2, format.mintick), style=label.style_label_left, color=colorTPFull, textcolor=pnlTextColor))
+            array.push(tp1Labels,    label.new(x=bar_index + 11, y=tradeTP1,    text="TP1: " + str.tostring(tradeTP1, format.mintick)    + "\nPnL: $" + str.tostring(pnlTP1, format.mintick),    style=label.style_label_left, color=colorTP1,   textcolor=pnlTextColor))
+            array.push(slLabels,     label.new(x=bar_index + 11, y=tradeSL,     text="SL: "  + str.tostring(tradeSL,  format.mintick)     + "\nPnL: $" + str.tostring(pnlSL,  format.mintick),     style=label.style_label_left, color=colorSL,    textcolor=pnlTextColor))
+            array.push(entryLabels,  label.new(x=bar_index + 11, y=entryFixed,  text="Entry: " + str.tostring(entryFixed, format.mintick) + "\nLot: " + str.tostring(lotSize, format.percent),        style=label.style_label_left, color=colorEntry, textcolor=pnlTextColor))
+            if showTradeBox
+                color resultColor = isBuyTrade ? colorBoxBuy : colorBoxSell
+                array.push(tradeResultLabels, label.new(x=bar_index, y=(tradeTPFull + tradeSL) / 2, text="PnL: $" + str.tostring(tradePnL, format.mintick), style=label.style_label_center, color=resultColor, textcolor=pnlTextColor))
+
+// === Draw current trade lines and labels ===
+var line  currentTPFullLine  = na
+var line  currentTP1Line     = na
+var line  currentSLLine      = na
+var line  currentEntryLine   = na
+var label currentTPFullLabel = na
+var label currentTP1Label    = na
+var label currentSLLabel     = na
+var label currentEntryLabel  = na
+
+if inTrade
+    if not na(currentTPFullLine)
+        line.delete(currentTPFullLine)
+    if not na(currentTP1Line)
+        line.delete(currentTP1Line)
+    if not na(currentSLLine)
+        line.delete(currentSLLine)
+    if not na(currentEntryLine)
+        line.delete(currentEntryLine)
+    if not na(currentTPFullLabel)
+        label.delete(currentTPFullLabel)
+    if not na(currentTP1Label)
+        label.delete(currentTP1Label)
+    if not na(currentSLLabel)
+        label.delete(currentSLLabel)
+    if not na(currentEntryLabel)
+        label.delete(currentEntryLabel)
+
+    currentTPFullLine  := line.new(x1=bar_index, y1=tradeTPFull, x2=bar_index + 1, y2=tradeTPFull, color=colorTPFull, style=line.style_dashed, width=2, extend=extend.right)
+    currentTP1Line     := line.new(x1=bar_index, y1=tradeTP1,    x2=bar_index + 1, y2=tradeTP1,    color=colorTP1,   style=line.style_dashed, width=2, extend=extend.right)
+    currentSLLine      := line.new(x1=bar_index, y1=tradeSL,     x2=bar_index + 1, y2=tradeSL,     color=colorSL,    style=line.style_dashed, width=2, extend=extend.right)
+    currentEntryLine   := line.new(x1=bar_index, y1=entryFixed,  x2=bar_index + 1, y2=entryFixed,  color=colorEntry, style=line.style_solid,  width=2, extend=extend.right)
+
+    currentTPFullLabel := label.new(x=bar_index + 2, y=tradeTPFull, text="TP2: " + str.tostring(tradeTPFull, format.mintick) + "\nPnL: $" + str.tostring(f_calcPnL(tradeTPFull), format.mintick), style=label.style_label_left, color=colorTPFull, textcolor=pnlTextColor)
+    currentTP1Label    := label.new(x=bar_index + 2, y=tradeTP1,    text="TP1: " + str.tostring(tradeTP1, format.mintick)    + "\nPnL: $" + str.tostring(f_calcPnL(tradeTP1), format.mintick),    style=label.style_label_left, color=colorTP1,   textcolor=pnlTextColor)
+    currentSLLabel     := label.new(x=bar_index + 2, y=tradeSL,     text="SL: "  + str.tostring(tradeSL,  format.mintick)     + "\nPnL: $" + str.tostring(f_calcPnL(tradeSL),  format.mintick),     style=label.style_label_left, color=colorSL,    textcolor=pnlTextColor)
+    currentEntryLabel  := label.new(x=bar_index + 2, y=entryFixed,  text="Entry: " + str.tostring(entryFixed, format.mintick) + "\nLot: " + str.tostring(lotSize, format.percent),        style=label.style_label_left, color=colorEntry, textcolor=pnlTextColor)
+
+    // Dynamic PnL label
+    if showDynamicPnL
+        if not na(currentPnLLabel)
+            label.delete(currentPnLLabel)
+        topPrice    = tradeTPFull > tradeSL ? tradeTPFull : tradeSL
+        bottomPrice = tradeTPFull > tradeSL ? tradeSL : tradeTPFull
+        midPrice    = (topPrice + bottomPrice) / 2
+        float yPos = midPrice
+        if pnlLabelPosition == "top"
+            yPos := topPrice
+        else if pnlLabelPosition == "bottom"
+            yPos := bottomPrice
+        int xPos = bar_index
+        float currentPnLVal = f_calcPnL(close)
+        colPnL = currentPnLVal >= 0 ? pnlProfitColor : pnlLossColor
+        currentPnLLabel := label.new(x=xPos, y=yPos,
+                                     text="PnL: $" + str.tostring(currentPnLVal, format.mintick),
+                                     style=label.style_label_center,
+                                     color=colPnL, textcolor=pnlTextColor)
+
+// === Pin Bar Plots (toggle visibility only) ===
+plotshape(showPinBarShape and usePinBar and isBullPinBar, title="Bullish Pin Bar", location=location.belowbar, color=colorTP1, style=shape.triangleup,   size=size.tiny)
+plotshape(showPinBarShape and usePinBar and isBearPinBar, title="Bearish Pin Bar", location=location.abovebar, color=colorSL,  style=shape.triangledown, size=size.tiny)
+
+// === Alerts ===
+alertcondition(showBuy,  title="Buy Signal",  message="Buy Signal – Check chart for entry and lot size.")
+alertcondition(showSell, title="Sell Signal", message="Sell Signal – Check chart for entry and lot size.")
+
+// === Stats Panel ===
+if showStatsPanel and barstate.islastconfirmedhistory
+    if na(statsTable)
+        statsTable := table.new(position.top_right, 2, 6, bgcolor=statsBgColor, frame_color=statsFrameColor, frame_width=1)
+    int fStartDate = startDate
+    int fEndDate   = endDate
+    if useCurrentDate
+        fStartDate := timestamp(year(time), month(time), dayofmonth(time), 0, 0)
+        fEndDate   := timestamp(year(time), month(time), dayofmonth(time), 23, 59)
+    int fTotalTrades = 0
+    int fWins        = 0
+    int fLosses      = 0
+    int fBreakeven   = 0
+    float fCumulative = 0.0
+    int tradesCount = array.size(tradePnLs)
+    if tradesCount > 0
+        for i = 0 to tradesCount - 1
+            int tTime = array.get(tradeTimes, i)
+            if tTime >= fStartDate and tTime <= fEndDate
+                fTotalTrades := fTotalTrades + 1
+                float pnlValue = array.get(tradePnLs, i)
+                fCumulative := fCumulative + pnlValue
+                if pnlValue > 0
+                    fWins := fWins + 1
+                else if pnlValue < 0
+                    fLosses := fLosses + 1
+                else
+                    fBreakeven := fBreakeven + 1
+    table.cell(statsTable, 0, 0, "Stats", bgcolor=statsHeaderColor, text_color=statsTextColor)
+    table.cell(statsTable, 0, 1, "Total Trades:", text_color=statsTextColor)
+    table.cell(statsTable, 1, 1, str.tostring(fTotalTrades), text_color=statsTextColor)
+    table.cell(statsTable, 0, 2, "Wins:", text_color=statsTextColor)
+    table.cell(statsTable, 1, 2, str.tostring(fWins), text_color=statsTextColor)
+    table.cell(statsTable, 0, 3, "Losses:", text_color=statsTextColor)
+    table.cell(statsTable, 1, 3, str.tostring(fLosses), text_color=statsTextColor)
+    table.cell(statsTable, 0, 4, "Breakeven:", text_color=statsTextColor)
+    table.cell(statsTable, 1, 4, str.tostring(fBreakeven), text_color=statsTextColor)
+    table.cell(statsTable, 0, 5, "Total PnL:", text_color=statsTextColor)
+    table.cell(statsTable, 1, 5, str.tostring(fCumulative, format.mintick), text_color=statsTextColor)
