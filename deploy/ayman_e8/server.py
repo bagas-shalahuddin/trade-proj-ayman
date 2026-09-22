@@ -44,6 +44,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+# Load .env from THIS directory, not the shell's cwd, and before any os.environ read
+# below. Doing it here rather than in run.ps1/run.sh means `python server.py` behaves
+# identically to the launcher scripts -- the launcher parsing .env itself was a second
+# implementation that could disagree with this one.
+_ENV = Path(__file__).with_name(".env")
+if _ENV.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_ENV)
+    except ImportError:                       # tiny fallback: KEY=VALUE, # comments
+        for line in _ENV.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
 from strategies._mt5 import MT5Broker  # noqa: E402
 from strategies._plans import get  # noqa: E402
 from strategies._risk import RiskEngine  # noqa: E402
@@ -197,5 +213,11 @@ if __name__ == "__main__":
         _selftest()
     else:
         if not SECRET:
-            sys.exit("WEBHOOK_SECRET is empty -- set it in .env before running")
+            where = "found" if _ENV.exists() else "MISSING"
+            sys.exit(chr(10).join([
+                "WEBHOOK_SECRET is empty.",
+                f"  .env looked for at: {_ENV}  ({where})",
+                "  fix: cd to this folder, copy .env.example to .env, then set",
+                "  WEBHOOK_SECRET to the same string as the Pine input.",
+            ]))
         serve(a.live, a.host, a.port)

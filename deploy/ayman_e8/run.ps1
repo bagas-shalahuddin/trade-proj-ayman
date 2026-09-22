@@ -1,7 +1,8 @@
-# Windows: run from this folder after filling .env
+# Windows: run from this folder, in an ELEVATED shell (port 80). Fill .env first.
+#   .un.ps1           dry run
+#   .un.ps1 --live    sends real orders
 $ErrorActionPreference = "Stop"
-Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
-  $k, $v = $_ -split '=', 2; [Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim())
-}
+Set-Location $PSScriptRoot
+if (-not (Test-Path .env)) { throw ".env not found. Copy-Item .env.example .env, then edit it." }
 python server.py --selftest
-if ($args -contains "--live") { python server.py --live } else { python server.py }
+python server.py @args
