@@ -19,7 +19,8 @@ day 90; that number is what the $24 buys.
     trades.jsonl       written by the server, one line per alert (gitignored)
 
 Everything else is imported from the repo: `strategies/_risk.py` (rules),
-`strategies/_mt5.py` (broker), `strategies/_plans.py` (`e8_pro_5k`). Both directories ship in this repo; keep the layout.
+`strategies/_mt5.py` (broker), `strategies/_plans.py` (`e8_pro_5k`). Copy the whole
+repo, not this folder alone.
 
 ## Setup
 

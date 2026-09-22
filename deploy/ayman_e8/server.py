@@ -45,9 +45,15 @@ from strategies._risk import RiskEngine  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ayman_e8")
 
-PLAN = get("e8_pro_5k")
+PLAN = get(os.environ.get("PLAN", "e8_pro_5k"))
 SYMBOL = os.environ.get("SYMBOL", "XAUUSD")
 RISK_FRAC = float(os.environ.get("RISK_FRAC", "0.0075"))
+if PLAN.rules.max_days is not None and RISK_FRAC < 0.02:
+    # A deadline inverts the sizing advice: small size does not lose, it runs out of
+    # time. Loud, not fatal -- it is a legitimate choice to accept a timeout.
+    log.warning("%s has a %d-day limit and RISK_FRAC is %.2f%%: most attempts will "
+                "TIME OUT rather than bust. See the plan verdict.",
+                PLAN.name, PLAN.rules.max_days, RISK_FRAC * 100)
 SECRET = os.environ.get("WEBHOOK_SECRET", "")
 POLL = 5.0                       # seconds between guard() sweeps
 JOURNAL = Path(__file__).with_name("trades.jsonl")
@@ -166,8 +172,10 @@ def _selftest() -> None:
         except ValueError:
             continue
         raise AssertionError(f"accepted: {bad!r}")
-    eng = RiskEngine(PLAN.initial, PLAN.rules)
-    eng.mark(PLAN.initial + PLAN.initial * PLAN.rules.daily_profit_cap)
+    # pinned to the capped plan: this asserts the cap, whatever PLAN is set to
+    plan = get("e8_pro_5k")
+    eng = RiskEngine(plan.initial, plan.rules)
+    eng.mark(plan.initial + plan.initial * plan.rules.daily_profit_cap)
     assert eng.budget() == 0.0, "profit cap must stop new risk"
     print("selftest ok")
 

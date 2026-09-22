@@ -37,6 +37,33 @@ class Plan:
 
 PLANS: dict[str, Plan] = {
     # ------------------------------------------------------------------ #
+    "fundednext_trial_100k": Plan(
+        name="FundedNext $100k trial, 14 days",
+        initial=100_000.0,
+        fee=0.0,
+        rules=PropRules(
+            profit_target=0.05,                     # $5,000
+            daily_limit=0.05,                       # $5,000
+            max_loss=0.10,                          # $10,000, STATIC
+            trailing=False,
+            min_trading_days=3,
+            max_days=14,                            # THE binding rule
+            max_day_share=1.0,
+            day_stop=0.015,
+        ),
+        payout_at=None,
+        split=None,
+        verdict=(
+            "14 days is the whole story (research/prop_pass.py, 2026-09-22). At the "
+            "0.75% sizing that is optimal everywhere else, 80% of attempts TIME OUT "
+            "rather than lose: P(pass) 19.6%. It peaks at 73.3% around 3% risk "
+            "($3,000/trade), where the zero-edge control is already 54.8% -- three "
+            "quarters of that is variance, not the strategy. Same rules without the "
+            "deadline: 99.0% at 0.75%. Treat a trial as a plumbing test, not a "
+            "strategy test, and size at 3% knowingly."
+        ),
+    ),
+    # ------------------------------------------------------------------ #
     "e8_pro_5k": Plan(
         name="E8 Pro $5k, 8% static (Forex market, 1:30)",
         initial=5_000.0,
