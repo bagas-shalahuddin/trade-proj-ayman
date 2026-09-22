@@ -30,8 +30,6 @@ Risk per trade is min(RISK_FRAC * initial, engine.budget()): a fixed fraction, c
 the engine when a limit is near. 0.75% is what research/prop_pass.py measured.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging
@@ -129,6 +127,12 @@ def journal(rec: dict) -> None:
 
 
 def serve(live: bool, host: str, port: int) -> None:
+    # Imported here so --selftest runs without fastapi installed. This file must NOT
+    # carry `from __future__ import annotations`: with postponed annotations FastAPI
+    # cannot resolve `Request`, treats the parameter as a request BODY, and answers
+    # every alert with 422 while looking perfectly healthy. Caught 2026-09-22 by
+    # posting a real alert at a stub broker; /state kept working the whole time
+    # because it has no annotated parameters.
     from fastapi import FastAPI, Request, Response
     import uvicorn
 
