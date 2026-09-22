@@ -22,6 +22,9 @@ Everything else is imported from the repo: `strategies/_risk.py` (rules),
 `strategies/_mt5.py` (broker), `strategies/_plans.py` (`e8_pro_5k`). Copy the whole
 repo, not this folder alone.
 
+**Fresh Windows VPS? Follow [SETUP-VPS.md](SETUP-VPS.md) instead** — same steps,
+with the firewall, clock, MT5 and scheduled-task details filled in.
+
 ## Setup
 
 1. **TradingView** (Pro or above -- webhook alerts need it)
@@ -41,9 +44,12 @@ repo, not this folder alone.
    - `python server.py` = DRY RUN: decides and logs, sends nothing. Watch one full
      day of alerts land in `trades.jsonl` before `--live`.
    - `python server.py --live` sends orders. `GET /state` shows the engine.
+   - Override with `PORT`/`HOST` in .env if you put a reverse proxy in front.
 
-3. **Expose port 8787** to TradingView's alert IPs only (they are published), or put
-   the server behind a reverse proxy with TLS. The secret is the only other guard.
+3. **Expose port 80** to TradingView's four published IPs only:
+   `52.89.214.238, 34.212.75.30, 54.218.53.128, 52.32.178.7`. TradingView accepts
+   only ports 80 and 443, so 80 it is; binding it needs an elevated shell. The secret
+   is the only other guard.
 
 ## Rules enforced by the engine (E8 Pro, `e8_pro_5k`)
 

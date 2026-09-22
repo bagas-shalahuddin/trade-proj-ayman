@@ -14,6 +14,12 @@ line -- and arrives as JSON. This process owns three things only:
      intraday day-stop, all enforced by `strategies/_risk.py` BEFORE any order;
   3. one market order with the alert's stop and TP1 attached -- never without a stop.
 
+PORT 80 BY DEFAULT, and that is not a preference: TradingView "only ports 80 and 443
+are accepted. Requests to other ports will be rejected." Binding 80 needs an elevated
+shell on Windows. Because the port is open to the internet, the secret is the only
+thing standing between a stranger and your account -- keep the firewall rule scoped to
+TradingView's four published IPs.
+
 What the backtest actually did, and what is therefore reproduced: entry at the signal
 bar's close; stop at `sl`; exit at `tp` = TP1 (entry +/- 0.84R). TP1 closes the whole
 position in the script, so TPFull and the break-even move never fire. Deviation stated
@@ -184,8 +190,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true")
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8787)
+    ap.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "80")))
     a = ap.parse_args()
     if a.selftest:
         _selftest()
