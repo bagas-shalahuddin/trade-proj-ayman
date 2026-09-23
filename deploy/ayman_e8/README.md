@@ -22,7 +22,7 @@ Everything else is imported from the repo: `strategies/_risk.py` (rules),
 `strategies/_mt5.py` (broker), `strategies/_plans.py` (`e8_pro_5k`). Copy the whole
 repo, not this folder alone.
 
-**Fresh Windows VPS? Follow [SETUP-VPS.md](SETUP-VPS.md) instead** — same steps,
+**Fresh Windows VPS? Follow [SETUP-VPS.md](SETUP-VPS.md) instead** -- same steps,
 with the firewall, clock, MT5 and scheduled-task details filled in.
 
 ## Setup
@@ -65,11 +65,50 @@ with the firewall, clock, MT5 and scheduled-task details filled in.
 `MetaTrader5` (the Python package) only exists for Windows. Options, honestly:
 
 - **Windows VPS** ($5-10/month). Tested path. `run.ps1`.
-- **Linux + Wine**: install MT5 under Wine, install Windows Python inside the same
-  Wine prefix, `pip install MetaTrader5` there, run `server.py` with that Python.
-  `run.sh` assumes this. Not tested from this repo.
+- **Linux + Wine**: the recipe below. Slower to set up, and adds a layer that can fail.
 - cTrader Open API (E8 supports cTrader) is cross-platform, but `_mt5.py` would need
   a cTrader twin. Not built.
+
+### Linux + Wine, step by step
+
+The `MetaTrader5` package is a Windows extension module, so the interpreter must be the
+Windows Python inside the same Wine prefix. Ubuntu's `python3` cannot import it.
+
+```bash
+export WINEPREFIX=$HOME/.wine MT5_PYTHON="wine python"
+cd /tmp && wget https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe
+wine python-3.12.8-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
+wine python -m pip install -r requirements.txt
+wine python -c "import MetaTrader5 as m; print(m.__version__)"   # the gate
+```
+
+Then in `.env`: `PORT=8080`, `HOST=0.0.0.0`, and a Windows-style `MT5_PATH` pointing at
+`terminal64.exe`. Port 80 needs root on Linux, so redirect rather than run as root:
+
+```bash
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+```
+
+`HOST` must be `0.0.0.0`, not `127.0.0.1`: REDIRECT rewrites the destination to the
+interface address, not to loopback. Keep 8080 closed in the security group, so the only
+way in is port 80, scoped to TradingView's four IPs.
+
+Three things that cost an afternoon each if missed:
+
+- **MT5 needs a desktop.** There is no headless mode. xrdp + XFCE works; otherwise
+  `Xvfb :0 -screen 0 1280x1024x24 &` plus `x11vnc` for the first login.
+- **Same Linux user, same `WINEPREFIX`, for both processes.** Wine's IPC lives inside
+  the prefix, and a terminal launched from a desktop icon does not read `.bashrc`, so it
+  can silently use a different prefix than the server. The failure is a mute
+  `(-10005, 'IPC timeout')` -- identical to every other cause, which is what makes it
+  expensive.
+- **Run the server under `tmux`**, not from the desktop terminal, or closing the RDP
+  session takes the server with it.
+
+`initialize()` defaults to a 60s timeout; `_mt5.py` uses 180s (`MT5_TIMEOUT`) because a
+small VPS is still finishing MT5's own login when Python asks for the channel. Under 2GB
+of RAM expect it to fail anyway: MT5 prints its own view as `0 / 1 Gb memory` on the
+second line of Journal, which is the one line that settles it.
 
 ## What differs from the backtest, stated
 

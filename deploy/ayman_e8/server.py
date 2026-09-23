@@ -136,7 +136,12 @@ def serve(live: bool, host: str, port: int) -> None:
     from fastapi import FastAPI, Request, Response
     import uvicorn
 
-    b = MT5Broker(dry_run=not live)
+    # MT5_PATH: only needed when initialize() cannot find the terminal by itself.
+    # It looks the path up in the registry from the last MANUALLY launched terminal,
+    # so on a fresh VPS where MT5 was installed but never opened, the entry is empty
+    # and initialize() fails with (-10005, 'IPC timeout') -- which reads like a network
+    # fault and is not one.
+    b = MT5Broker(dry_run=not live, terminal_path=os.environ.get("MT5_PATH") or None)
     b.connect()
     eng = RiskEngine(PLAN.initial, PLAN.rules)
     b.sync(eng)

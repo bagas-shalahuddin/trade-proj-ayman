@@ -89,7 +89,12 @@ class MT5Broker:
         password = os.environ.get("MT5_PASSWORD")
         server = os.environ.get("MT5_SERVER")
 
-        kw = {"path": self.terminal_path} if self.terminal_path else {}
+        # 180s, not the 60s default: on a small VPS the terminal is still finishing its
+        # own login when initialize() asks for the IPC channel, and the wait expires as
+        # (-10005, 'IPC timeout') -- which reads like a network fault and is not one.
+        kw = {"timeout": int(os.environ.get("MT5_TIMEOUT", "180000"))}
+        if self.terminal_path:
+            kw["path"] = self.terminal_path
         if login and password and server:
             kw.update(login=int(login), password=password, server=server)
         if not mt5.initialize(**kw):
